@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Address Comparison</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        #map {
+            height: 95vh;
+            width: 100%;
+        }
+        .file-input-container {
+            margin-bottom: 15px;
+        }
+        .legend {
+            background-color: white;
+            padding: 6px;
+            line-height: 18px;
+            color: #333;
+            opacity: 0.9;
+            display: block;
+        }
+        .legend i {
+            width: 18px;
+            height: 18px;
+            float: left;
+            margin-right: 8px;
+            opacity: 0.7;
+        }
+        .legend .circle {
+            border-radius: 50%; /* Make the shape round */
+        }
+        .legend .line {
+            display: inline-block;
+            width: 20px;
+            height: 5px;
+            background-color: #33ff57;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+    </style>
+</head>
+<body>
+
+<div class="file-input-container">
+    <label for="geojsonFile1">Choose the Vetro address file:</label>
+    <input type="file" id="geojsonFile1" accept=".geojson" />
+    <label for="geojsonFile2">Choose the Navarre address file:</label>
+    <input type="file" id="geojsonFile2" accept=".geojson" />
+    <label for="geojsonFile3">Choose the Drop file:</label>
+    <input type="file" id="geojsonFile3" accept=".geojson" />
+</div>
+
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    var map = L.map('map', {
+        maxBounds: L.latLngBounds(L.latLng(-90, -180), L.latLng(90, 180)), // Ensure scroll wheel zoom is enabled
+        minZoom: 2, // Adjust the zoom delta to control how much zoom changes per scroll event
+    }).setView([0, 0], 2); // Start with world view
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '@ Developed by JGN',
+        maxZoom: 99,
+    }).addTo(map);
+
+    let firstGeojsonData;
+    let secondGeojsonData;
+    let thirdGeojsonLayer;
+
+    document.getElementById('geojsonFile1').addEventListener('change', function() {
+        handleFirstGeoJSONUpload(this);
+    });
+
+    document.getElementById('geojsonFile2').addEventListener('change', function() {
+        handleSecondGeoJSONUpload(this);
+    });
+
+    document.getElementById('geojsonFile3').addEventListener('change', function() {
+        handleThirdGeoJSONUpload(this);
+    });
+
+    function handleFirstGeoJSONUpload(inputElement) {
+        const file = inputElement.files[0];
+        const reader = new FileReader();
+
+        reader.onload = function(e) {
+            firstGeojsonData = JSON.parse(e.target.result);
+
+            if (secondGeojsonData) {
+                updateMapWithFilteredFirstGeoJSON();
+            }
+        };
+
+        reader.readAsText(file);
+    }
+
+    function handleSecondGeoJSONUpload(inputElement) {
+        const file = inputElement.files[0];
+        const reader = new FileReader();
+
+        reader.onload = function(e) {
+            secondGeojsonData = JSON.parse(e.target.result);
+
+            if (firstGeojsonData) {
+                updateMapWithFilteredFirstGeoJSON();
+            }
+
+            // Compare points in the second GeoJSON with the first GeoJSON
+            const unmatchedPoints = [];
+            const feetToMeters = 0.3048; // 1 foot in meters
+            const radiusInMeters = 1 * feetToMeters;
+
+            secondGeojsonData.features.forEach(function(secondFeature) {
+                const secondLatLng = L.latLng(
+                    secondFeature.geometry.coordinates[1],
+                    secondFeature.geometry.coordinates[0]
+                );
+
+                let matchFound = false;
+                firstGeojsonData.features.forEach(function(firstFeature) {
+                    const firstLatLng = L.latLng(
+                        firstFeature.geometry.coordinates[1],
+                        firstFeature.geometry.coordinates[0]
+                    );
+
+                    if (secondLatLng.distanceTo(firstLatLng) <= radiusInMeters) {
+                        matchFound = true;
+                    }
+                });
+
+                if (!matchFound) {
+                    unmatchedPoints.push(secondFeature);
+                }
+            });
+
+            // Display unmatched points on the map
+            if (unmatchedPoints.length > 0) {
+                L.geoJSON({
+                    type: "FeatureCollection",
+                    features: unmatchedPoints
+                }, {
+                    pointToLayer: function(feature, latlng) {
+                        const coords = feature.geometry.coordinates;
+                        const popupContent = `
+                            <strong>House Number:</strong> ${feature.properties['ADD_NUMBER'] || 'N/A'}<br>
+                            <strong>Prop Type:</strong> ${feature.properties['PROP_TYPE'] || 'N/A'}<br>
+                            <strong>Coordinates:</strong> ${coords[1].toFixed(6)}, ${coords[0].toFixed(6)}
+                        `;
+                        return L.circleMarker(latlng, {
+                            radius: 5,
+                            fillColor: "#ff5733",
+                            color: "#ff5733",
+                            weight: 1,
+                            opacity: 1,
+                            fillOpacity: 0.8
+                        }).bindPopup(popupContent);
+                    }
+                }).addTo(map);
+            }
+        };
+
+        reader.readAsText(file);
+    }
+
+    function handleThirdGeoJSONUpload(inputElement) {
+        const file = inputElement.files[0];
+        const reader = new FileReader();
+
+        reader.onload = function(e) {
+            const thirdGeojsonData = JSON.parse(e.target.result);
+
+            // Remove the existing third GeoJSON layer if present
+            if (thirdGeojsonLayer) {
+                map.removeLayer(thirdGeojsonLayer);
+            }
+
+            // Add the third GeoJSON layer to the map
+            thirdGeojsonLayer = L.geoJSON(thirdGeojsonData, {
+                style: function(feature) {
+                    return {
+                        color: '#33ff57',
+                        weight: 3,
+                        opacity: 0.7
+                    };
+                },
+                onEachFeature: function(feature, layer) {
+                    if (feature.properties && feature.properties['House Number']) {
+                        layer.bindPopup(
+                            `<strong>House Number:</strong> ${feature.properties['House Number'] || 'N/A'}`
+                        );
+                    }
+                }
+            }).addTo(map);
+
+            map.fitBounds(thirdGeojsonLayer.getBounds());
+        };
+
+        reader.readAsText(file);
+    }
+
+    function updateMapWithFilteredFirstGeoJSON() {
+        // Collect coordinates from the second GeoJSON for filtering
+        const secondCoordinates = new Set(
+            secondGeojsonData.features.map(f => f.geometry.coordinates.join(','))
+        );
+
+        // Filter out matching points from the first GeoJSON
+        const filteredFirstFeatures = firstGeojsonData.features.filter(feature => {
+            const coordString = feature.geometry.coordinates.join(',');
+            return !secondCoordinates.has(coordString);
+        });
+
+        // Clear existing layers
+        map.eachLayer(layer => {
+            if (layer instanceof L.GeoJSON) {
+                map.removeLayer(layer);
+            }
+        });
+
+        // Display filtered first GeoJSON file on the map
+        if (filteredFirstFeatures.length > 0) {
+            L.geoJSON({
+                type: "FeatureCollection",
+                features: filteredFirstFeatures
+            }, {
+                pointToLayer: function(feature, latlng) {
+                    return L.circleMarker(latlng, {
+                        radius: 5,
+                        fillColor: "#3388ff",
+                        color: "#3388ff",
+                        weight: 1,
+                        opacity: 1,
+                        fillOpacity: 0.8
+                    }).bindPopup(
+                        `<strong>House Number:</strong> ${feature.properties['House Number'] || 'N/A'}`//<br>
+                        //<strong>Prop Type:</strong> ${feature.properties['PROP_TYPE'] || 'N/A'}`
+                    );
+                }
+            }).addTo(map);
+
+            map.fitBounds(L.geoJSON({
+                type: "FeatureCollection",
+                features: filteredFirstFeatures
+            }).getBounds());
+        }
+    }
+
+    // Add legend to the map
+    var legend = L.control({ position: 'topright' });
+
+    legend.onAdd = function(map) {
+        var div = L.DomUtil.create('div', 'legend');
+        div.innerHTML += '<i class="circle" style="background: #3388ff"></i> Vetro address<p>';
+        div.innerHTML += '<i class="circle" style="background: #ff5733"></i> Nav1 Source address<p>';
+        div.innerHTML += '<i class="line" style="background: #33ff57"></i> Third GeoJSON (Multiline)<p>';
+        return div;
+    };
+
+    legend.addTo(map);
+</script>
+
+</body>
+</html>
