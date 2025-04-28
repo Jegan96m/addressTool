@@ -146,7 +146,7 @@
                     pointToLayer: function(feature, latlng) {
                         const coords = feature.geometry.coordinates;
                         const popupContent = `
-                            <strong>House Number:</strong> ${feature.properties['House Number'] || 'N/A'}<br>
+                            <strong>House Number:</strong> ${feature.properties['Address'] || 'N/A'}<br>
                             <strong>Prop Type:</strong> ${feature.properties['Type'] || 'N/A'}<br>
                             <strong>Coordinates:</strong> ${coords[1].toFixed(6)}, ${coords[0].toFixed(6)}
                         `;
@@ -236,7 +236,7 @@
                         opacity: 1,
                         fillOpacity: 0.8
                     }).bindPopup(
-                        `<strong>House Number:</strong> ${feature.properties['Address'] || 'N/A'}`//<br>
+                        `<strong>House Number:</strong> ${feature.properties['House Number'] || 'N/A'}`//<br>
                         //<strong>Prop Type:</strong> ${feature.properties['PROP_TYPE'] || 'N/A'}`
                     );
                 }
